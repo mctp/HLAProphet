@@ -1,0 +1,8 @@
+1. Create personalized database using philosopher. This step combines gencode (HLA seqs removed)
+with the cohort personalized HLA reference produced by HLAProphet.
+
+```
+philosopher workspace --init
+philosopher database --custom $GENCODE --add $HLA --contam
+philosopher workspace --clean
+```
