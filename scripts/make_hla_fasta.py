@@ -43,15 +43,7 @@ if __name__ == "__main__":
         plex_database_records = []
         i = 0
         for seq_id, seq in sorted(plex_database.items()):
-            #Add in dummy fields corresponding to what would normally be uniprot IDs:
-            #>db|UniqueIdentifier|EntryName ProteinName OS=OrganismName OX=OrganismIdentifier [GN=GeneName ]PE=ProteinExistence SV=SequenceVersion
-            #Replace * and : characters to prevent problems parsing nonstandard characters
-            #Unique ID has the format [OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2}
-            unique_id = f"Q0HLA0Z{i:03}"
-            #dummy_id = f"sp|{unique_id}|HLA-{seq_id} HLA-{seq_id} OS=Homo Sapiens GN=HLA-{seq_id} PE=2 SV=1".replace("*", "-").replace(":", "-")
-            #dummy_id = f"{i+1}|{i+2}|{i+3}|{i+4}|{i+5}|HLA-{seq_id}|HLA-{seq_id}|{len(seq)}".replace("*", "-").replace(":", "-")
-            dummy_id = f"HLA-{seq_id}".replace("*", "-").replace(":", "-")
-            plex_database_records.append(SeqRecord(id = dummy_id, seq = seq, description = ""))
+            plex_database_records.append(SeqRecord(id = f"HLA-{seq_id}".replace("*", "-").replace(":", "-"), seq = seq, description = ""))
             i += 1
         SeqIO.write(plex_database_records, of, "fasta")
 
