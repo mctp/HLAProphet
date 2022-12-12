@@ -24,19 +24,21 @@ if __name__ == "__main__":
         
         #After filtering, move to just HLA PSMs
         #Discard any PSMs that have potential matches outside the HLAs of interest
-        cols = ["Peptide", "Protein Start", "Protein End", "Protein", "Mapped Proteins"] + psm.iloc[:, -plex_size - 1:-1].columns.tolist()
+        cols = ["Peptide", "Protein Start", "Protein End", "Protein", "Mapped Proteins", "Intensity"] + psm.iloc[:, -plex_size - 1:-1].columns.tolist()
         psm_hla = psm[psm["Protein"].str.startswith("HLA")].loc[:, cols].copy()
-        psm_hla = pd.melt(psm_hla, id_vars = cols[:5], value_vars = cols[5:], var_name = "Aliquot", value_name = "MS2")
-
+        psm_hla = pd.melt(psm_hla, id_vars = cols[:6], value_vars = cols[6:], var_name = "Aliquot", value_name = "MS2")
+        psm_hla["Mapped Proteins"] = psm_hla["Mapped Proteins"].fillna("")
+        psm_hla["Proteins"] = psm_hla[["Protein", "Mapped Proteins"]].apply(", ".join, axis = 1)
+        psm_hla = psm_hla[["Peptide", "Protein Start", "Protein End", "Aliquot", "Proteins", "Intensity", "MS2"]]
         #For each PSM in each aliquot, check if the peptide is predicted to be present in the sample
         psm_hla["Predicted"] = False
         psm_hla["Predicted_n"] = 0
         psm_hla["Aliquot_prot"] = [[] for _ in range(len(psm_hla))]
         for i, row in psm_hla.iterrows():
-            print(i)
-            alleles = tryptic_predictions[tryptic_predictions["peptide"] == row["Peptide"]]["allele"].values
-            for allele in alleles:
-                if row["Protein"].find(allele) != -1 or row["Mapped Proteins"].find(allele) != -1:
+            print(len(psm_hla), i)
+            aliquot_alleles = hla_types[hla_types["aliquot"] == row["Aliquot"]]["adjusted"]
+            for allele in aliquot_alleles:
+                if row["Proteins"].find(allele) != -1:
                     psm_hla.loc[i, "Predicted"] = True
                     psm_hla.loc[i, "Predicted_n"] += 1
                     psm_hla.loc[i, "Aliquot_prot"].append(allele)
