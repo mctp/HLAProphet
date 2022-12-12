@@ -3,7 +3,7 @@ import numpy as np
 import glob
 import sys
 
-def hla_from_psm(filename, n):
+def hla_from_psm(filename, plex_size, ref_name, hla_types, n):
     print(f"Processing: {filename}")
     #Apply initial filters across all PSMs
     print(f"\tReading PSM")
@@ -38,7 +38,7 @@ def hla_from_psm(filename, n):
                 psm_hla.loc[i, "Aliquot_prot"].append(allele)
     #Record plex number for later use
     psm_hla["Plex"] = n
-    return psm_hla        
+    return psm_hla    
 
 def main():
     fragpipe_workdir = sys.argv[1]
@@ -51,7 +51,8 @@ def main():
     hla_peptides = pd.DataFrame()
     psm_filenames = sorted(glob.glob(fragpipe_workdir + "/*/psm.tsv"))
     for i, f in enumerate(psm_filenames):
-        hla_peptides = pd.concat([hla_peptides, hla_from_psm(f, i)])
+        hla_peptides = pd.concat([hla_peptides, hla_from_psm(f, plex_size, ref_name, hla_types, i)], ignore_index = True)
+    print(hla_peptides)
 
 if __name__ == "__main__":
     main()
