@@ -54,7 +54,7 @@ if __name__ == "__main__":
         of.write(f"aliquot,gene,original,adjusted\n")
         for case in relationship_database.keys():
             original_alleles = relationship_database[case]["original"]
-            adjusted_alleles = relationship_database[case]["adjusted"]
+            adjusted_alleles = [x.replace("*", "-").replace(":", "-") for x in relationship_database[case]["adjusted"]]
             for original, adjusted in zip(original_alleles, adjusted_alleles):
                 gene = adjusted.split("*")[0]
                 of.write(f"{case},HLA-{gene},HLA-{original},HLA-{adjusted}\n")
