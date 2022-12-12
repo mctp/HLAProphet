@@ -3,11 +3,13 @@ import numpy as np
 import glob
 import sys
 
-def hla_from_psm(filename, plex_size, ref_name, hla_types, n):
+def parse_psm(filename, plex_size, ref_name, hla_types, tryptic_predictions, n):
+    #Parses PSMs to get HLA peptide intensities, and global aliquot ratios for later quantification
     print(f"Processing: {filename}")
     #Apply initial filters across all PSMs
     print(f"\tReading PSM")
     psm = pd.read_csv(filename, sep = "\t")
+    samples = [x for x in psm.columns.values[-plex_size:] if x != ref_name]
     #Only keep PSMs with Ref intensity > 0, Purity > 0.5, PeptidePropeht Prob  > 0.5
     print(f"\tFiltering PSM")
     psm = psm[(psm[ref_name] != 0) & (psm["Purity"] > 0.5) & (psm["PeptideProphet Probability"] > 0.5)]
@@ -16,9 +18,11 @@ def hla_from_psm(filename, plex_size, ref_name, hla_types, n):
     psm = psm[psm["MS2"] > np.quantile(psm["MS2"], q = 0.05)]
     #Keep only the highest MS2 PSM for each Peptide
     psm = psm.loc[psm.groupby("Peptide")["MS2"].idxmax()]
-    #After filtering, move to just HLA PSMs
+    #Record ratios for all samples
+    ratios = psm[samples].div(psm[ref_name], axis = 0).median(axis = 0).to_frame(name = "med_ratio").reset_index(names = ["Aliquot"])
+    #Parse HLA PSMs
     #Discard any PSMs that have potential matches outside the HLAs of interest
-    cols = ["Peptide", "Protein Start", "Protein End", "Protein", "Mapped Proteins", "Intensity"] + psm.iloc[:, -plex_size - 1:-1].columns.tolist()
+    cols = ["Peptide", "Protein Start", "Protein End", "Protein", "Mapped Proteins", "Intensity"] + samples + [ref_name]
     psm_hla = psm[psm["Protein"].str.startswith("HLA")].loc[:, cols].copy()
     psm_hla = pd.melt(psm_hla, id_vars = cols[:6], value_vars = cols[6:], var_name = "Aliquot", value_name = "MS2")
     psm_hla["Mapped Proteins"] = psm_hla["Mapped Proteins"].fillna("")
@@ -31,28 +35,55 @@ def hla_from_psm(filename, plex_size, ref_name, hla_types, n):
     print(f"\tChecking peptide predictions")
     for i, row in psm_hla.iterrows():
         aliquot_alleles = hla_types[hla_types["aliquot"] == row["Aliquot"]]["adjusted"]
+        predicted_types = set(tryptic_predictions[tryptic_predictions["peptide"] == row["Peptide"]]["allele"])
         for allele in aliquot_alleles:
-            if row["Proteins"].find(allele) != -1:
+            if allele in predicted_types:
                 psm_hla.loc[i, "Predicted"] = True
                 psm_hla.loc[i, "Predicted_n"] += 1
                 psm_hla.loc[i, "Aliquot_prot"].append(allele)
     #Record plex number for later use
     psm_hla["Plex"] = n
-    return psm_hla    
+    return psm_hla, ratios
+
+def remove_bad_peptides(peptides):
+    #Calculate noise as the mean MS2 intensity of all peptides that are not predicted to be present in a sample
+    #Don't include in calculations aliquots for which no typing is known
+    predicted_aliquots = set(peptides[peptides["Predicted"] == True]["Aliquot"])
+    noise_peptides = peptides[(peptides["Predicted"] == False) & (peptides["Aliquot"].isin(predicted_aliquots))]
+    noise = noise_peptides.groupby(["Peptide", "Plex"])["MS2"].apply(np.mean).reset_index().rename(columns = {"MS2":"Noise"})
+    peptides = peptides.merge(noise, how = "left")
+    peptides["Noise_LR"] = np.log2(peptides["MS2"]/peptides["Noise"])
+    return peptides
 
 def main():
     fragpipe_workdir = sys.argv[1]
     ref_name = sys.argv[2]
-    plex_size = sys.argv[3]
+    plex_size = int(sys.argv[3])
     hla_types = pd.read_csv(sys.argv[4])
     tryptic_predictions = pd.read_csv(sys.argv[5])
     outfile_prefix = sys.argv[6]
 
+    #Get HLA peptide intensities from PSMs, and keep track of global ratio medians for later normalization
     hla_peptides = pd.DataFrame()
+    aliquot_ratios = pd.DataFrame()
     psm_filenames = sorted(glob.glob(fragpipe_workdir + "/*/psm.tsv"))
     for i, f in enumerate(psm_filenames):
-        hla_peptides = pd.concat([hla_peptides, hla_from_psm(f, plex_size, ref_name, hla_types, i)], ignore_index = True)
+        peptides, ratios = parse_psm(f, plex_size, ref_name, hla_types, tryptic_predictions, i)
+        hla_peptides = pd.concat([hla_peptides, peptides], ignore_index = True)
+        aliquot_ratios = pd.concat([aliquot_ratios, ratios], ignore_index = True)
     print(hla_peptides)
+    print(aliquot_ratios)
+
+    #Remove peptides that don't have a strong signal to noise ratio, with noise
+    #define as intensity of peptides in samples where they are not predicted to exist
+    hla_peptides = remove_bad_peptides(hla_peptides)
+    
+    
+    
+    
+
+
+
 
 if __name__ == "__main__":
     main()
