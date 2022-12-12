@@ -8,6 +8,7 @@ table for protein -> case inside the plex.
 
 import sys
 import pandas as pd
+import math
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
@@ -15,40 +16,42 @@ from Bio.Seq import Seq
 if __name__ == "__main__":
     hla_types = pd.read_csv(sys.argv[1])
     imgt_database = {record.id:record for record in SeqIO.parse(sys.argv[2], "fasta")}
-    plex_database_filename = sys.argv[3]
+    fasta_database_filename = sys.argv[3]
     relationship_database_filename = sys.argv[4]
 
-    plex_database = {}
+    fasta_database = {}
     relationship_database = {aliq:{"original":[], "adjusted":[]} for aliq in hla_types["aliquot"]}
 
     genes = hla_types.columns[2:]
     for aliq in hla_types["aliquot"]:
         tmp_types = [hla_types[hla_types["aliquot"] == aliq][g].values[0] for g in genes]
         for t in tmp_types:
+            if isinstance(t, float):
+                continue
             t_short = ":".join(t.split(":")[:2])
             seq = imgt_database[t_short]
-            if seq.seq in plex_database.values():
+            if seq.seq in fasta_database.values():
                 #If HLA sequence is present under a different name, just let all
                 #samples use the first observed name.
-                existing_name = [k for k, v in plex_database.items() if v == seq.seq][0]
+                existing_name = [k for k, v in fasta_database.items() if v == seq.seq][0]
                 relationship_database[aliq]["adjusted"].append(existing_name)
                 relationship_database[aliq]["original"].append(t)
             else:
                 #Else it is a new sequence
                 relationship_database[aliq]["adjusted"].append(seq.id)
                 relationship_database[aliq]["original"].append(t)
-                plex_database[seq.id] = seq.seq
+                fasta_database[seq.id] = seq.seq
 
-    with open(plex_database_filename, 'w') as of:
-        plex_database_records = []
+    with open(fasta_database_filename, 'w') as of:
+        fasta_database_records = []
         i = 0
-        for seq_id, seq in sorted(plex_database.items()):
-            plex_database_records.append(SeqRecord(id = f"HLA-{seq_id}".replace("*", "-").replace(":", "-"), seq = seq, description = ""))
+        for seq_id, seq in sorted(fasta_database.items()):
+            fasta_database_records.append(SeqRecord(id = f"HLA-{seq_id}".replace("*", "-").replace(":", "-"), seq = seq, description = ""))
             i += 1
-        SeqIO.write(plex_database_records, of, "fasta")
+        SeqIO.write(fasta_database_records, of, "fasta")
 
     with open(relationship_database_filename, 'w') as of:
-        of.write(f"case,gene,original,adjusted\n")
+        of.write(f"aliquot,gene,original,adjusted\n")
         for case in relationship_database.keys():
             original_alleles = relationship_database[case]["original"]
             adjusted_alleles = relationship_database[case]["adjusted"]
