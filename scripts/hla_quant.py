@@ -46,8 +46,11 @@ def parse_psm(filename, plex_size, ref_name, hla_types, tryptic_predictions, n):
     psm_hla["Plex"] = n
     return psm_hla, ratios
 
-def remove_bad_peptides(peptides):
+def remove_bad_peptides(peptides, ref_name):
     print(f"Removing peptides with bad signal to noise ratio")
+    #Move ref channel to its own column
+    refs = peptides[peptides["Aliquot"] == ref_name][["Peptide", "Plex", "MS2"]].copy().rename(columns = {"MS2":"RefMS2"})
+    peptides = peptides[peptides["Aliquot"] != ref_name].copy().merge(refs, how = "left")
     #Calculate noise as the mean MS2 intensity of all peptides that are not predicted to be present in a sample
     #Don't include in calculations aliquots for which no typing is known
     predicted_aliquots = set(peptides[peptides["Predicted"] == True]["Aliquot"])
@@ -73,7 +76,13 @@ def remove_bad_peptides(peptides):
     peptides_keep = peptides_keep[peptides_keep["Predicted"]]
     return peptides_keep.drop(columns = ["Noise", "Noise_LR"])
 
-def adjusted_ratio(ratios, aliquot_ratios, pool_n):
+def is_outlier(x):
+    lower = x.quantile(.25)
+    upper = x.quantile(.75)
+    v = 1.5 * (lower - upper)
+    return ~x.between(lower - v, upper + v)
+
+def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n):
     #Unlike most peptides, HLA peptides are present at variable numbers of copies
     #in the reference channel. Peptides that are rare in the population may only be
     #in a couple of samples, so when pooling in the reference channel these peptides
@@ -81,44 +90,46 @@ def adjusted_ratio(ratios, aliquot_ratios, pool_n):
     #causes the intensity ratio to be artificially high due to a smaller denominator.
     #We adjust each ratio taking into account the expected copy number in the reference
     #to reverse the effect of dilution.
-    ratios["Ratio"] = ratios["MS2"] / ratios["RefMS2"]
-    ratios = ratios.merge(aliquot_ratios, how = "left")
+    peptides["Ratio"] = peptides["MS2"] / peptides["RefMS2"]
+    peptides = peptides.merge(aliquot_ratios, how = "left")
     #First count how many copies we expect to be in the reference channel
     #This result will be imperfect if the HLA type of all samples is not known
-    pep_n = ratios[["Peptide", "Aliquot", "Predicted_n"]].drop_duplicates().groupby("Peptide").sum("Predicted_n").reset_index().rename(columns = {"Predicted_n":"Total_n"})
-    ratios = ratios.merge(pep_n, how = "left")
+    pep_n = peptides[["Peptide", "Aliquot", "Predicted_n"]].drop_duplicates().groupby("Peptide").sum("Predicted_n").reset_index().rename(columns = {"Predicted_n":"Total_n"})
+    peptides = peptides.merge(pep_n, how = "left")
     #The direct adjustment would be Ratio * (Peptide_n / Aliquot_n) to reverse the effect of dilution,
     #however this gets too extreme as Peptide_n approaches 0. We therefore add a constant C to both the numerator
     #and denominator to stabilize the adjustment. We will try all values of C 1:10000 to get the value that most reduces
     #the relationship between copy number and ratio
     c_best = 0
+    c_best_p = 0
+    res_last = -1
     for c_cur in range(10000):
         if c_cur % 100 == 0:
-            print(f"Testing C value: {c_cur}")
-        c_cur = 0
-        ratio_adj = ratios["Ratio"] * ((ratios["Total_n"] + c_cur)/(pool_n + c_cur))
-        #Perform our tests on median normalized ratios
-        ratio_adj_md = np.log2(ratio_adj) - 
-        res = scipy.stats.linregress(ratio_adj, ratios["Total_n"])
-
-
-    return peptides_adjusted
-
-
-def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n):
-    #For each peptide, take the ratio of the MS2 intensity relative to the reference channel
-    refs = peptides[peptides["Aliquot"] == ref_name][["Peptide", "Plex", "MS2"]].copy().rename(columns = {"MS2":"RefMS2"})
-    ratios = peptides[peptides["Aliquot"] != ref_name].copy().merge(refs, how = "left")
-    ratios_adjusted = adjusted_ratio(ratios, aliquot_ratios, pool_n)
-
-    peptides["LR"] = np.log2(peptides["Ratio"])
-    #Also provide median normalized ratios
-    
-    peptides["LR_MD"] = peptides["LR"] - np.log2(peptides["med_ratio"])
-    peptides["Ratio_MD"] = 2**peptides["LR_MD"]
+            print(f"Testing C value: {c_cur}, best p so far {c_best_p}")
+        ratio_adj = (peptides["Ratio"]/peptides["Predicted_n"]) * ((peptides["Total_n"] + c_cur)/(pool_n + c_cur))
+        #Check the strength of the association between the peptide ratio and the reference copy number
+        res = scipy.stats.linregress(ratio_adj, peptides["Total_n"])[3]
+        #Keep C values that leave us with the least relationship
+        if res > c_best_p:
+            c_best_p = res
+            c_best = c_cur
+        #P values will be strictly increasing until the best one is found, then strictly decreasing
+        #We can stop if we see a drop in p
+        if res < res_last:
+            break
+        res_last = res
+    peptides["Ratio_adj"] = peptides["Ratio"] * ((peptides["Total_n"] + c_best)/(pool_n + c_best))
+    peptides["LR_adj"] = np.log2(peptides["Ratio_adj"])
+    peptides["LR_adj_MD"] = peptides["LR_adj"] - np.log2(peptides["med_ratio"])
+    peptides["Ratio_adj_MD"] = 2**peptides["LR_adj_MD"]
     return peptides[["Peptide", "Protein Start", "Protein End", "Aliquot", "Proteins", "Intensity",
                      "MS2", "Predicted", "Predicted_n", "Aliquot_prot", "Plex", "RefMS2", "Ratio",
-                     "Ratio_MD", "LR", "LR_MD"]]
+                     "Ratio_adj", "Ratio_adj_MD", "LR_adj", "LR_adj_MD"]]
+
+#def allele_abundance():
+    #Abundance is calculated as RefInt*Ratio, where the ratio is the median ratio
+    #and RefInt is the sum of the reference intensities of the top 3 peptides for a protein
+
 
 def main():
     hla_types = pd.read_csv(sys.argv[1]) #Relationship database constructed by make_hla_fasta.py
@@ -140,11 +151,15 @@ def main():
         aliquot_ratios = pd.concat([aliquot_ratios, ratios], ignore_index = True)
 
     #Remove peptides that don't have a strong signal to noise ratio
-    hla_peptides_filtered = remove_bad_peptides(hla_peptides)
+    hla_peptides_filtered = remove_bad_peptides(hla_peptides, ref_name)
 
     #Calculate peptide ratios relative to the ref channel
     hla_ratios = calc_ratios(hla_peptides_filtered, ref_name, aliquot_ratios, pool_n)
     hla_ratios.to_csv(f"{outdir}/{outfile_prefix}_peptide_ratios.csv", index = False)
+
+    #Calculate allele specific protein abundance, using only peptides that distinguish
+    #between alleles in a haplotype
+    #hla_allele_abundance = allele_abundance(hla_ratios)
 
 if __name__ == "__main__":
     main()
