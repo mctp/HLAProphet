@@ -22,7 +22,7 @@ if __name__ == "__main__":
     fasta_database = {}
     relationship_database = {aliq:{"original":[], "adjusted":[]} for aliq in hla_types["aliquot"]}
 
-    genes = hla_types.columns[2:]
+    genes = hla_types.columns[1:]
     for aliq in hla_types["aliquot"]:
         tmp_types = [hla_types[hla_types["aliquot"] == aliq][g].values[0] for g in genes]
         for t in tmp_types:
