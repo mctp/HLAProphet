@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import glob
 import sys
+import scipy
 
 def parse_psm(filename, plex_size, ref_name, hla_types, tryptic_predictions, n):
     #Parses PSMs to get HLA peptide intensities, and global aliquot ratios for later quantification
@@ -21,7 +22,6 @@ def parse_psm(filename, plex_size, ref_name, hla_types, tryptic_predictions, n):
     #Record ratios for all samples
     ratios = psm[samples].div(psm[ref_name], axis = 0).median(axis = 0).to_frame(name = "med_ratio").reset_index(names = ["Aliquot"])
     #Parse HLA PSMs
-    #Discard any PSMs that have potential matches outside the HLAs of interest
     cols = ["Peptide", "Protein Start", "Protein End", "Protein", "Mapped Proteins", "Intensity"] + samples + [ref_name]
     psm_hla = psm[psm["Protein"].str.startswith("HLA")].loc[:, cols].copy()
     psm_hla = pd.melt(psm_hla, id_vars = cols[:6], value_vars = cols[6:], var_name = "Aliquot", value_name = "MS2")
@@ -46,6 +46,7 @@ def parse_psm(filename, plex_size, ref_name, hla_types, tryptic_predictions, n):
     return psm_hla, ratios
 
 def remove_bad_peptides(peptides):
+    print(f"Removing peptides with bad signal to noise ratio")
     #Calculate noise as the mean MS2 intensity of all peptides that are not predicted to be present in a sample
     #Don't include in calculations aliquots for which no typing is known
     predicted_aliquots = set(peptides[peptides["Predicted"] == True]["Aliquot"])
@@ -53,7 +54,19 @@ def remove_bad_peptides(peptides):
     noise = noise_peptides.groupby(["Peptide", "Plex"])["MS2"].apply(np.mean).reset_index().rename(columns = {"MS2":"Noise"})
     peptides = peptides.merge(noise, how = "left")
     peptides["Noise_LR"] = np.log2(peptides["MS2"]/peptides["Noise"])
-    return peptides
+    #Get the sample of all logratios for peptides that are predicted to be absent
+    #Ignore cases with no typing information, and cases with MS2 of 0
+    noise_ratios = peptides[(peptides["Aliquot"].isin(predicted_aliquots)) & (peptides["Predicted"] == False) & (~peptides["Noise_LR"].isna()) & (np.isfinite(peptides["Noise_LR"]))]["Noise_LR"]
+    #For each peptide with an observed noise value, see if predicted peptide LRs
+    #appear to come from a different distribution than noise LRs
+    ks_tests = pd.DataFrame()
+    for peptide in noise["Peptide"].unique():
+        signal_ratios = peptides[(peptides["Peptide"] == peptide) & (peptides["Predicted"] == True) & (~peptides["Noise_LR"].isna())]["Noise_LR"]
+        if len(signal_ratios) == 0:
+            continue
+        res = scipy.stats.kstest(signal_ratios, noise_ratios)[1]
+        ks_tests = pd.concat([ks_tests, pd.DataFrame({"Peptide":[peptide], "ks_p":[res]})], ignore_index = True)
+    return peptides[~peptides["Peptide"].isin(ks_tests[ks_tests["ks_p"] > .05]["Peptide"])]
 
 def main():
     fragpipe_workdir = sys.argv[1]
@@ -68,22 +81,16 @@ def main():
     aliquot_ratios = pd.DataFrame()
     psm_filenames = sorted(glob.glob(fragpipe_workdir + "/*/psm.tsv"))
     for i, f in enumerate(psm_filenames):
-        peptides, ratios = parse_psm(f, plex_size, ref_name, hla_types, tryptic_predictions, i)
+        peptides, ratios = parse_psm(f, plex_size, ref_name, hla_types, tryptic_predictions, i + 1)
         hla_peptides = pd.concat([hla_peptides, peptides], ignore_index = True)
         aliquot_ratios = pd.concat([aliquot_ratios, ratios], ignore_index = True)
     print(hla_peptides)
     print(aliquot_ratios)
 
-    #Remove peptides that don't have a strong signal to noise ratio, with noise
-    #define as intensity of peptides in samples where they are not predicted to exist
+    #Remove peptides that don't have a strong signal to noise ratio
     hla_peptides = remove_bad_peptides(hla_peptides)
-    
-    
-    
-    
 
-
-
+    
 
 if __name__ == "__main__":
     main()
