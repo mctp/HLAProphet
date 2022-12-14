@@ -6,7 +6,7 @@
 
     2) Create an HLA fasta reference using make_hla_fasta.py
 
-    3) Predict tryptic peptides using make_hla_fasta.py
+    3) Predict tryptic peptides using tryptic_peptides.py
 
 # Fragpipe workflow
     1. Create personalized database using philosopher. This step combines gencode (HLA seqs removed)
