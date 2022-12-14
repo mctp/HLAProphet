@@ -126,9 +126,14 @@ def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n):
                      "MS2", "Predicted", "Predicted_n", "Aliquot_prot", "Plex", "RefMS2", "Ratio",
                      "Ratio_adj", "Ratio_adj_MD", "LR_adj", "LR_adj_MD"]]
 
-#def allele_abundance():
+def allele_abundance(ratios):
     #Abundance is calculated as RefInt*Ratio, where the ratio is the median ratio
     #and RefInt is the sum of the reference intensities of the top 3 peptides for a protein
+    #We only want to consider peptides that are allele specific
+    ratios_allele = ratios[ratios["Predicted_n"] == 1].copy()
+    ratios_allele["Allele"] = [x[0] for x in ratios_allele["Aliquot_prot"]]
+    ratio_medians = ratios_allele[["Aliquot", "Allele", "LR_adj_MD"]]
+    return abundance
 
 
 def main():
