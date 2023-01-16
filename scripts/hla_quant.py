@@ -84,7 +84,7 @@ def is_outlier(x):
     v = 1.5 * (upper - lower)
     return ~x.between(lower - v, upper + v)
 
-def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n):
+def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n, types, tryptic):
     #Unlike most peptides, HLA peptides are present at variable numbers of copies
     #in the reference channel. Peptides that are rare in the population may only be
     #in a couple of samples, so when pooling in the reference channel these peptides
@@ -96,7 +96,8 @@ def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n):
     peptides = peptides.merge(aliquot_ratios, how = "left")
     #First count how many copies we expect to be in the reference channel
     #This result will be imperfect if the HLA type of all samples is not known
-    pep_n = peptides[["Peptide", "Aliquot", "Predicted_n"]].drop_duplicates().groupby("Peptide").sum("Predicted_n").reset_index().rename(columns = {"Predicted_n":"Total_n"})
+    types.rename(columns = {"adjusted":"allele"}, inplace = True)
+    pep_n = tryptic.merge(types[["allele", "aliquot"]], how = "left").groupby("peptide").count()["allele"].reset_index().rename(columns = {"allele":"Total_n", "peptide":"Peptide"})
     peptides = peptides.merge(pep_n, how = "left")
     #The direct adjustment would be Ratio * (Peptide_n / Aliquot_n) to reverse the effect of dilution,
     #however this gets too extreme as Peptide_n approaches 0. We therefore add a constant C to both the numerator
@@ -108,7 +109,7 @@ def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n):
     for c_cur in range(10000):
         if c_cur % 100 == 0:
             print(f"Testing C value: {c_cur}, best p so far {c_best_p}")
-        ratio_adj = (peptides["Ratio"]/peptides["Predicted_n"]) * ((peptides["Total_n"] + c_cur)/(pool_n + c_cur))
+        ratio_adj = (peptides["Ratio"]/peptides["Predicted_n"]) * ((peptides["Total_n"] + c_cur)/(pool_n*2 + c_cur))
         #Check the strength of the association between the peptide ratio and the reference copy number
         res = scipy.stats.linregress(ratio_adj, peptides["Total_n"])[3]
         #Keep C values that leave us with the least relationship
@@ -120,7 +121,7 @@ def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n):
         if res < res_last:
             break
         res_last = res
-    peptides["Ratio_adj"] = peptides["Ratio"] * ((peptides["Total_n"] + c_best)/(pool_n + c_best))
+    peptides["Ratio_adj"] = peptides["Ratio"] * ((peptides["Total_n"] + c_best)/(pool_n*2 + c_best))
     peptides["LR_adj"] = np.log2(peptides["Ratio_adj"])
     peptides["LR_adj_MD"] = peptides["LR_adj"] - np.log2(peptides["med_ratio"])
     peptides["Ratio_adj_MD"] = 2**peptides["LR_adj_MD"]
@@ -203,7 +204,7 @@ def main():
     hla_refints = calculate_refint(hla_peptides[hla_peptides["Peptide"].isin(hla_peptides_filtered["Peptide"])].copy(), ref_name)
     
     #Calculate peptide ratios relative to the ref channel
-    hla_ratios = calc_ratios(hla_peptides_filtered.copy(), ref_name, aliquot_ratios.copy(), pool_n)
+    hla_ratios = calc_ratios(hla_peptides_filtered.copy(), ref_name, aliquot_ratios.copy(), pool_n, hla_types.copy(), tryptic_predictions.copy())
     hla_ratios.to_csv(f"{outdir}/{outfile_prefix}_peptide_ratios.csv", index = False)
 
     #Calculate allele specific protein abundance, using only peptides that distinguish
