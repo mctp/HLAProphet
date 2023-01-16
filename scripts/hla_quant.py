@@ -77,9 +77,11 @@ def remove_bad_peptides(peptides, ref_name):
     return peptides_keep.drop(columns = ["Noise", "Noise_LR"])
 
 def is_outlier(x):
+    if len(x) < 5:
+        return ~(x < np.inf)
     lower = x.quantile(.25)
     upper = x.quantile(.75)
-    v = 1.5 * (lower - upper)
+    v = 1.5 * (upper - lower)
     return ~x.between(lower - v, upper + v)
 
 def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n):
@@ -123,18 +125,56 @@ def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n):
     peptides["LR_adj_MD"] = peptides["LR_adj"] - np.log2(peptides["med_ratio"])
     peptides["Ratio_adj_MD"] = 2**peptides["LR_adj_MD"]
     return peptides[["Peptide", "Protein Start", "Protein End", "Aliquot", "Proteins", "Intensity",
-                     "MS2", "Predicted", "Predicted_n", "Aliquot_prot", "Plex", "RefMS2", "Ratio",
+                     "MS2", "Predicted", "Predicted_n", "Total_n", "Aliquot_prot", "Plex", "RefMS2", "Ratio",
                      "Ratio_adj", "Ratio_adj_MD", "LR_adj", "LR_adj_MD"]]
 
-def allele_abundance(ratios):
+def calculate_refint(peptides, ref):
+    #Reference intensity of a peptide is the reference fraction of total MS2, mutiplied by the MS1 intensity
+    ms2_totals = peptides[["Peptide", "Plex", "MS2"]].groupby(["Peptide", "Plex"]).sum("MS2").reset_index().rename(columns = {"MS2":"MS2_total"})
+    refs = peptides[peptides["Aliquot"] == ref].merge(ms2_totals, how = "left")[["Peptide", "Plex", "Intensity", "MS2", "MS2_total"]]
+    refs["RefInt"] = (refs["MS2"] / refs["MS2_total"]) * refs["Intensity"]
+    #For each peptide, calculate the average RefInt across all plexes, excluding zeros
+    refs_nonzero = refs[refs["RefInt"] != 0][["Peptide", "RefInt"]]
+    peptide_refints = refs_nonzero.groupby(["Peptide"]).mean("RefInt").reset_index()
+    #For each protein, calculate final RefInt as the sum of top 3 peptide RefInts
+    #Here, we only consider top 3 peptides that uniquely assign to each gene
+    peptides["gene_set"] = peptides["Proteins"].replace("(HLA-[ABCDPQR1]+)-[0-9A-Z]+-[0-9A-Z]+", "\\1", regex = True).str.split(", ").apply(set)
+    peptides_unique = peptides[peptides["gene_set"].apply(len) == 1].copy()
+    peptides_unique["Gene"] = peptides_unique["gene_set"].map(lambda x: list(x)[0])
+    gene_refints = peptides_unique[["Gene", "Peptide"]].drop_duplicates().merge(peptide_refints, how = "left").groupby("Gene").apply(lambda x: x.nlargest(3, "RefInt"))["RefInt"].reset_index()[["Gene", "RefInt"]].groupby("Gene").sum()
+    gene_refints["RefInt"] = np.log2(gene_refints["RefInt"])
+    return gene_refints.reset_index()
+
+
+def allele_abundance(ratios, refints):
     #Abundance is calculated as RefInt*Ratio, where the ratio is the median ratio
     #and RefInt is the sum of the reference intensities of the top 3 peptides for a protein
     #We only want to consider peptides that are allele specific
     ratios_allele = ratios[ratios["Predicted_n"] == 1].copy()
-    ratios_allele["Allele"] = [x[0] for x in ratios_allele["Aliquot_prot"]]
-    ratio_medians = ratios_allele[["Aliquot", "Allele", "LR_adj_MD"]]
+    ratios_allele["Allele"] = ratios_allele["Aliquot_prot"].apply(lambda x: x[0])
+    ratios_allele["Gene"] = ratios_allele["Allele"].replace("(HLA-[ABCDPQR1]+)-.*", "\\1", regex = True)
+    ratio_outliers = ratios_allele[["Aliquot", "Gene", "Allele", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "Allele", "LR_adj_MD"])
+    ratio_outliers["Outlier"] = ratio_outliers.groupby(["Aliquot", "Gene", "Allele"]).apply(lambda x: is_outlier(x["LR_adj_MD"])).tolist()
+    ratio_outliers = ratio_outliers[ratio_outliers["Outlier"] != True]
+    ratio_medians = ratio_outliers.groupby(["Aliquot", "Gene", "Allele"]).apply(lambda x: x["LR_adj_MD"].median()).reset_index().rename(columns = {0:"Ratio"})
+    abundance = ratio_medians.merge(refints, how = "left")
+    abundance["Abundance"] = abundance["RefInt"] + abundance["Ratio"]
     return abundance
 
+def gene_abundance(ratios, refints):
+    #Abundance is calculated as RefInt*Ratio, where the ratio is the median ratio
+    #and RefInt is the sum of the reference intensities of the top 3 peptides for a protein
+    #We only want to consider peptides that are allele specific
+    ratios["gene_set"] = ratios["Proteins"].replace("(HLA-[ABCDPQR1]+)-[0-9A-Z]+-[0-9A-Z]+", "\\1", regex = True).str.split(", ").apply(set)
+    ratios_gene = ratios[ratios["Predicted_n"].isin([1, 2]) & (ratios["gene_set"].apply(len) == 1)].copy()
+    ratios_gene["Gene"] = ratios_gene["gene_set"].apply(lambda x: list(x)[0])
+    ratio_outliers = ratios_gene[["Aliquot", "Gene", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "LR_adj_MD"])
+    ratio_outliers["Outlier"] = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(lambda x: is_outlier(x["LR_adj_MD"])).tolist()
+    ratio_outliers = ratio_outliers[ratio_outliers["Outlier"] != True]
+    ratio_medians = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(lambda x: x["LR_adj_MD"].median()).reset_index().rename(columns = {0:"Ratio"})
+    abundance = ratio_medians.merge(refints, how = "left")
+    abundance["Abundance"] = abundance["RefInt"] + abundance["Ratio"]
+    return abundance
 
 def main():
     hla_types = pd.read_csv(sys.argv[1]) #Relationship database constructed by make_hla_fasta.py
@@ -154,17 +194,26 @@ def main():
         peptides, ratios = parse_psm(f, plex_size, ref_name, hla_types, tryptic_predictions, i + 1)
         hla_peptides = pd.concat([hla_peptides, peptides], ignore_index = True)
         aliquot_ratios = pd.concat([aliquot_ratios, ratios], ignore_index = True)
+    hla_peptides.to_csv(f"{outdir}/{outfile_prefix}_peptide_raw.csv", index = False)
 
     #Remove peptides that don't have a strong signal to noise ratio
-    hla_peptides_filtered = remove_bad_peptides(hla_peptides, ref_name)
+    hla_peptides_filtered = remove_bad_peptides(hla_peptides.copy(), ref_name)
 
+    #Calculate refints
+    hla_refints = calculate_refint(hla_peptides[hla_peptides["Peptide"].isin(hla_peptides_filtered["Peptide"])].copy(), ref_name)
+    
     #Calculate peptide ratios relative to the ref channel
-    hla_ratios = calc_ratios(hla_peptides_filtered, ref_name, aliquot_ratios, pool_n)
+    hla_ratios = calc_ratios(hla_peptides_filtered.copy(), ref_name, aliquot_ratios.copy(), pool_n)
     hla_ratios.to_csv(f"{outdir}/{outfile_prefix}_peptide_ratios.csv", index = False)
 
     #Calculate allele specific protein abundance, using only peptides that distinguish
     #between alleles in a haplotype
-    #hla_allele_abundance = allele_abundance(hla_ratios)
+    hla_allele_abundance = allele_abundance(hla_ratios.copy(), hla_refints.copy())
+    hla_allele_abundance.to_csv(f"{outdir}/{outfile_prefix}_abundance_allele.csv", index = False)
+
+    #Calculate gene specific protein abundance, using only peptides that assign to a single gene
+    hla_gene_abundance = gene_abundance(hla_ratios.copy(), hla_refints.copy())
+    hla_gene_abundance.to_csv(f"{outdir}/{outfile_prefix}_abundance_gene.csv", index = False)
 
 if __name__ == "__main__":
     main()
