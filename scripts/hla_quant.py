@@ -167,7 +167,7 @@ def gene_abundance(ratios, refints):
     #and RefInt is the sum of the reference intensities of the top 3 peptides for a protein
     #We only want to consider peptides that are gene specific
     ratios["gene_set"] = ratios["Proteins"].replace("(HLA-[ABCDPQR1]+)-[0-9A-Z]+-[0-9A-Z]+", "\\1", regex = True).str.split(", ").apply(set)
-    ratios_gene = ratios[ratios["Predicted_n"].isin([2]) & (ratios["gene_set"].apply(len) == 1)].copy()
+    ratios_gene = ratios[ratios["Predicted_n"].isin([1, 2]) & (ratios["gene_set"].apply(len) == 1)].copy()
     ratios_gene["Gene"] = ratios_gene["gene_set"].apply(lambda x: list(x)[0])
     ratio_outliers = ratios_gene[["Aliquot", "Gene", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "LR_adj_MD"])
     ratio_outliers["Outlier"] = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(lambda x: is_outlier(x["LR_adj_MD"])).tolist()
