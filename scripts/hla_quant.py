@@ -125,6 +125,7 @@ def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n, types, tryptic):
     peptides["LR_adj"] = np.log2(peptides["Ratio_adj"])
     peptides["LR_adj_MD"] = peptides["LR_adj"] - np.log2(peptides["med_ratio"])
     peptides["Ratio_adj_MD"] = 2**peptides["LR_adj_MD"]
+    peptides = peptides[peptides["Ratio_adj"] != 0]
     return peptides[["Peptide", "Protein Start", "Protein End", "Aliquot", "Proteins", "Intensity",
                      "MS2", "Predicted", "Predicted_n", "Total_n", "Aliquot_prot", "Plex", "RefMS2", "Ratio",
                      "Ratio_adj", "Ratio_adj_MD", "LR_adj", "LR_adj_MD"]]
