@@ -25,11 +25,12 @@
     4. Run FragPipe in headless mode
 
     ```
-    MANIFEST=/mctp/share/users/mumphrey/HLAProphet/data/experiments/LSCC/ms/LSCC.fp-manifest
-    WORKFLOW=/mctp/share/users/mumphrey/HLAProphet/data/experiments/LSCC/ms/LSCC.HLAProphet.workflow
-    WORKDIR=/mctp/share/users/mumphrey/HLAProphet/data/experiments/LSCC/ms
-    MSFRAGGER=/mctp/share/users/mumphrey/HLAProphet/bin/MSFragger-3.5/MSFragger-3.5.jar
-    PHILOSOPHER=/mctp/share/users/mumphrey/HLAProphet/bin/philosopher/philosopher
+    COHORT=LSCC
+    MANIFEST=/mctp/share/users/mumphrey/HLAProphet/data/experiments/$COHORT/ms/Phosphoproteome/${COHORT}.HLAProphet.PhosphoGlyco.manifest
+    WORKFLOW=/mctp/share/users/mumphrey/HLAProphet/data/experiments/$COHORT/ms/Phosphoproteome/${COHORT}.HLAProphet.PhosphoGlyco.workflow
+    WORKDIR=/mctp/share/users/mumphrey/HLAProphet/data/experiments/${COHORT}/ms/Phosphoproteome
+    MSFRAGGER=/mctp/share/users/mumphrey/HLAProphet/bin/MSFragger-3.6/MSFragger-3.6.jar
+    PHILOSOPHER=/mctp/share/users/mumphrey/HLAProphet/bin/philosopher_4.6
     fragpipe --headless \
         --manifest $MANIFEST \
         --workflow $WORKFLOW \
