@@ -4,12 +4,20 @@ import glob
 import sys
 import scipy
 
-def parse_psm(filename, plex_size, ref_name, hla_types, tryptic_predictions, n):
+def parse_psm(filename, plex_size, ref_pattern, hla_types, tryptic_predictions, n):
     #Parses PSMs to get HLA peptide intensities, and global aliquot ratios for later quantification
     print(f"Processing: {filename}")
     #Apply initial filters across all PSMs
     print(f"\tReading PSM")
     psm = pd.read_csv(filename, sep = "\t")
+    #Use ref pattern to find ref channel column ID
+    ref_matches = [x for x in psm.columns.values if x.find(ref_pattern) != -1]
+    #Return an error if there is more than one match to the ref channel pattern
+    if len(ref_matches) > 1:
+        match_string = ", ".join(ref_matches)
+        raise RuntimeError(f"Multiple ref pattern matches: {match_string}")
+    else:
+        ref_name = ref_matches[0]
     samples = [x for x in psm.columns.values[-plex_size:] if x != ref_name]
     #Only keep PSMs with Ref intensity > 0, Purity > 0.5, PeptidePropeht Prob  > 0.5
     print(f"\tFiltering PSM")
@@ -44,6 +52,8 @@ def parse_psm(filename, plex_size, ref_name, hla_types, tryptic_predictions, n):
                 psm_hla.loc[i, "Aliquot_prot"].append(allele)
     #Record plex number for later use
     psm_hla["Plex"] = n
+    #Change ref channel ID to a consistent value across all plexes
+    psm_hla["Aliquot"] = psm_hla["Aliquot"].str.replace(ref_name, "ref")
     return psm_hla, ratios
 
 def remove_bad_peptides(peptides, ref_name):
@@ -182,7 +192,7 @@ def main():
     hla_types = pd.read_csv(sys.argv[1]) #Relationship database constructed by make_hla_fasta.py
     tryptic_predictions = pd.read_csv(sys.argv[2]) #Tryptic predictions made by tryptic_peptides.py
     fragpipe_workdir = sys.argv[3] #Directory that Fragpipe was fun on
-    ref_name = sys.argv[4] #Name of the ref channel in each psm.tsv
+    ref_pattern = sys.argv[4] #Name of the ref channel in each psm.tsv
     plex_size = int(sys.argv[5]) #Number of channels in each plex for this experiment
     pool_n = int(sys.argv[6]) #Number of aliquots constrbuting to the ref pool for this experiment
     outdir = sys.argv[7]
@@ -193,11 +203,13 @@ def main():
     aliquot_ratios = pd.DataFrame()
     psm_filenames = sorted(glob.glob(fragpipe_workdir + "/*/psm.tsv"))
     for i, f in enumerate(psm_filenames):
-        peptides, ratios = parse_psm(f, plex_size, ref_name, hla_types, tryptic_predictions, i + 1)
+        peptides, ratios = parse_psm(f, plex_size, ref_pattern, hla_types, tryptic_predictions, i + 1)
         hla_peptides = pd.concat([hla_peptides, peptides], ignore_index = True)
         aliquot_ratios = pd.concat([aliquot_ratios, ratios], ignore_index = True)
     hla_peptides.to_csv(f"{outdir}/{outfile_prefix}_peptide_raw.csv", index = False)
 
+    #Use a generic ref channel name after parsing ref channel patterns across multiple plexes
+    ref_name = "ref"
     #Remove peptides that don't have a strong signal to noise ratio
     hla_peptides_filtered = remove_bad_peptides(hla_peptides.copy(), ref_name)
 
