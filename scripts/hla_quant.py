@@ -3,6 +3,7 @@ import numpy as np
 import glob
 import sys
 import scipy
+import pathlib
 
 def parse_psm(filename, plex_size, ref_pattern, hla_types, tryptic_predictions, n):
     #Parses PSMs to get HLA peptide intensities, and global aliquot ratios for later quantification
@@ -197,6 +198,9 @@ def main():
     pool_n = int(sys.argv[6]) #Number of aliquots constrbuting to the ref pool for this experiment
     outdir = sys.argv[7]
     outfile_prefix = sys.argv[8] #Prefix for all output files
+
+    #Make sure outdir exists
+    pathlib.Path(outdir).mkdir(parents=True, exist_ok=True) 
 
     #Get HLA peptide intensities from PSMs, and keep track of global ratio medians for later normalization
     hla_peptides = pd.DataFrame()
