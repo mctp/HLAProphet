@@ -11,6 +11,9 @@ if __name__ == "__main__":
     cases = list(set(plex_map["case"]))
     for case in cases:
         hla_types = pd.read_csv(f"{hapster_dir}/{case}/{case}-DNA-N_haplotype_homozygous.csv", header = None, names = names)
-        types_full = pd.concat([types_full, hla_types], ignore_index = True)
+        aliquots = list(set(plex_map[plex_map["case"] == case]["aliquot"]))
+        for aliquot in aliquots:
+            hla_types["aliquot"] = aliquot
+            types_full = pd.concat([types_full, hla_types], ignore_index = True)
 
     types_full.to_csv(types_outfile, index = False)
