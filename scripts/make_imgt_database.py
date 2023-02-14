@@ -5,7 +5,11 @@ from Bio import SeqIO
 if __name__ == "__main__":
     tmp_dir = sys.argv[1]
     output_filename = sys.argv[2]
-    
+
+    #Make sure output locations exist
+    pathlib.Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+    pathlib.Path(output_filename).parent.mkdir(parents=True, exist_ok=True)
+
     genes = ["A", "B", "C", "DPA1", "DPB1", "DQA1", "DQB1", "DRA", "DRB1"]
 
     for gene in genes:
