@@ -1,5 +1,6 @@
 import sys
 import subprocess
+import pathlib
 from Bio import SeqIO
 
 if __name__ == "__main__":
