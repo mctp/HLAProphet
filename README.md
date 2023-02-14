@@ -1,42 +1,50 @@
+# HLAProphet
+
+HLAProphet is a tool that allows for personalized quantification of the HLA proteins in TMT MS/MS data using FragPipe. HLAProphet takes a list of known HLA types for all samples in an experiment and creates a fasta file containing a harmonized list of protein sequences. This HLA fasta file is then appended to an existing reference proteome for use as an augmented search database with FragPipe. After running FragPipe, HLAProphet then uses a modified version of the TMT-integrator algorithm to quantify HLA proteins at the gene and allele level.
+
+# Setup
+
+
 # HLAProphet workflow part 1:
-## TODO: Make these steps a single command from HLAProphet that takes as input HLA types
 
-1) Generate HLA types for all samples using any method (Hapster used for this example), 
-formatted as seen in LSCC_types.csv
+1) Generate HLA types for all samples using any method, formatted as seen in `examples/types.csv`
+
+2) Create a local version of the IMGT/HLA protein database using `scripts/make_imgt_database.py`
     ```
-    python scripts/types_from_hapster.py \
-        data/experiments/$COHORT/raw/${COHORT}_plex_map.csv \
-        $HAPSTER_DIR \
-        data/experiments/$COHORT/raw/${COHORT}_types.csv
+    python scripts/make_imgt_database.py \
+        examples/IMGT \
+        examples/IMGT/IMGT_HLA.fa
     ```
 
-2) Create an HLA fasta reference using make_hla_fasta.py
+3) Create an HLA fasta reference using `scripts/make_hla_fasta.py`. If two separate HLA types produce the same protein product, the protein is only included once in the output database. A relationship table is produced to tie original HLA types to the matching sequence in the HLA fasta, after clashes are resolved.
     ```
     python scripts/make_hla_fasta.py \
-        data/experiments/$COHORT/raw/${COHORT}_types.csv \
-        data/IMGT/IMGT_HLA.fa \
-        data/experiments/$COHORT/refs/${COHORT}_HLA.fa \
-        data/experiments/$COHORT/refs/${COHORT}_relationships.csv
+        examples/types.csv \
+        examples/IMGT/IMGT_HLA.fa \
+        examples/example_HLA.fa \
+        examples/example_relationships.csv
     ```
 
-3) Predict tryptic peptides using tryptic_peptides.py
+3) Predict tryptic peptides using `scripts/tryptic_peptides.py`
     ```
     python scripts/tryptic_peptides.py \
-        data/experiments/$COHORT/refs/${COHORT}_HLA.fa \
+        examples/example_HLA.fa \
         2 \
         7 \
         50 \
-        data/experiments/$COHORT/refs/${COHORT}_tryptic_peptides.csv
+        examples/example_tryptic_peptides.csv
     ```
 
 # Fragpipe workflow
-    1. Create personalized database using philosopher. This step combines gencode (HLA seqs removed)
+    1. Create personalized database using philosopher. This step combines a standard reference proteome (i.e. GENCODE)
     with the cohort personalized HLA reference produced by HLAProphet.
 
     ```
+    cd examples
     philosopher workspace --init
-    philosopher database --custom $GENCODE --add $HLA --contam
+    philosopher database --custom $GENCODE --add example_HLA.fa --contam
     philosopher workspace --clean
+    cd ../
     ```
 
     2. Save sample manifest in FragPipe using the GUI.
@@ -46,34 +54,26 @@ formatted as seen in LSCC_types.csv
     4. Run FragPipe in headless mode
 
     ```
-    COHORT=LSCC
-    EXPERIMENT=Proteome
-    MANIFEST=data/experiments/$COHORT/ms/$EXPERIMENT/${COHORT}.HLAProphet.manifest
-    WORKFLOW=data/experiments/$COHORT/ms/$EXPERIMENT/${COHORT}.HLAProphet.workflow
-    WORKDIR=data/experiments/${COHORT}/ms/$EXPERIMENT
-    MSFRAGGER=bin/MSFragger-3.7/MSFragger-3.7.jar
-    PHILOSOPHER=bin/philosopher
-    NCORES=32
     fragpipe --headless \
         --manifest $MANIFEST \
         --workflow $WORKFLOW \
         --threads $NCORES \
-        --workdir $WORKDIR \
+        --workdir $FRAGPIPE_WORKDIR \
         --config-msfragger $MSFRAGGER \
         --config-philosopher $PHILOSOPHER
     ```
 
 # HLAProphet workflow part 2:
-    1) Run HLA quant
+    1) Run HLA quant. 
 
     ```
     python scripts/hla_quant.py \
-        data/experiments/$COHORT/refs/${COHORT}_relationships.csv \
-        data/experiments/$COHORT/refs/${COHORT}_tryptic_peptides.csv \
-        data/experiments/$COHORT/ms/$EXPERIMENT \
+        examples/example_relationships.csv \
+        examples/example_tryptic_peptides.csv \
+        $FRAGPIPE_WORKDIR \
         $REF_PATTERN \
         $PLEX_SIZE \
         $POOL_N \
-        data/experiments/$COHORT/tables/$EXPERIMENT \
-        $COHORT
+        $OUTDIR  \
+        $OUT_PREFIX
     ```
