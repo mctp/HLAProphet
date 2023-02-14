@@ -36,8 +36,7 @@ HLAProphet is a tool that allows for personalized quantification of the HLA prot
     ```
 
 # Fragpipe workflow
-    1. Create personalized database using philosopher. This step combines a standard reference proteome (i.e. GENCODE)
-    with the cohort personalized HLA reference produced by HLAProphet.
+    1. Create personalized database using philosopher. This step combines a standard reference proteome (i.e. GENCODE) with the cohort personalized HLA reference produced by HLAProphet. Be sure to remove existing HLA sequences in the reference proteome before combining.
 
     ```
     cd examples
