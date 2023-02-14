@@ -4,6 +4,15 @@ HLAProphet is a tool that allows for personalized quantification of the HLA prot
 
 # Setup
 
+1) Install the HLAProphet conda environment
+    ```
+    conda install --file HLAProphet.yml
+    ```
+2) Install FragPipe: https://fragpipe.nesvilab.org/
+
+3) Install MSFragger: https://msfragger.nesvilab.org/
+
+4) Install Philosopher: https://philosopher.nesvilab.org/
 
 # HLAProphet workflow part 1:
 
