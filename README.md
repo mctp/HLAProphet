@@ -36,7 +36,7 @@ HLAProphet is a tool that allows for personalized quantification of the HLA prot
     ```
 
 # Fragpipe workflow
-    1. Create personalized database using philosopher. This step combines a standard reference proteome (i.e. GENCODE) with the cohort personalized HLA reference produced by HLAProphet. Be sure to remove existing HLA sequences in the reference proteome before combining.
+1. Create personalized database using philosopher. This step combines a standard reference proteome (i.e. GENCODE) with the cohort personalized HLA reference produced by HLAProphet. Be sure to remove existing HLA sequences in the reference proteome before combining.
 
     ```
     cd examples
@@ -46,11 +46,11 @@ HLAProphet is a tool that allows for personalized quantification of the HLA prot
     cd ../
     ```
 
-    2. Save sample manifest in FragPipe using the GUI.
+2. Save sample manifest in FragPipe using the GUI.
 
-    3. Save experiment workflow in FragPipe using the GUI. 
+3. Save experiment workflow in FragPipe using the GUI. 
 
-    4. Run FragPipe in headless mode
+4. Run FragPipe in headless mode
 
     ```
     fragpipe --headless \
@@ -63,7 +63,7 @@ HLAProphet is a tool that allows for personalized quantification of the HLA prot
     ```
 
 # HLAProphet workflow part 2:
-    1) Run HLA quant. 
+1) Run HLA quant.
 
     ```
     python scripts/hla_quant.py \
