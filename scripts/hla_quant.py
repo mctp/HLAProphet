@@ -158,6 +158,13 @@ def calculate_refint(peptides, ref):
     gene_refints["RefInt"] = np.log2(gene_refints["RefInt"])
     return gene_refints.reset_index()
 
+def median_helper(df):
+    #Function for use with df.groupby().apply()
+    #Takes ratio dataframes and produces median ratio, number of peptides contributing, and a list of peptides used
+    return pd.Series({
+        "Ratio":df["LR_adj_MD"].median(),
+        "Peptide_n":len(df["LR_adj_MD"]),
+        "Peptides":",".join(df["Peptide"])})
 
 def allele_abundance(ratios, refints):
     #Abundance is calculated as RefInt*Ratio, where the ratio is the median ratio
@@ -166,10 +173,10 @@ def allele_abundance(ratios, refints):
     ratios_allele = ratios[ratios["Predicted_n"] == 1].copy()
     ratios_allele["Allele"] = ratios_allele["Aliquot_prot"].apply(lambda x: x[0])
     ratios_allele["Gene"] = ratios_allele["Allele"].replace("(HLA-[ABCDPQR1]+)-.*", "\\1", regex = True)
-    ratio_outliers = ratios_allele[["Aliquot", "Gene", "Allele", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "Allele", "LR_adj_MD"])
+    ratio_outliers = ratios_allele[["Aliquot", "Gene", "Allele", "Peptide", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "Allele", "LR_adj_MD"])
     ratio_outliers["Outlier"] = ratio_outliers.groupby(["Aliquot", "Gene", "Allele"]).apply(lambda x: is_outlier(x["LR_adj_MD"])).tolist()
     ratio_outliers = ratio_outliers[ratio_outliers["Outlier"] != True]
-    ratio_medians = ratio_outliers.groupby(["Aliquot", "Gene", "Allele"]).apply(lambda x: x["LR_adj_MD"].median()).reset_index().rename(columns = {0:"Ratio"})
+    ratio_medians = ratio_outliers.groupby(["Aliquot", "Gene", "Allele"]).apply(median_helper).reset_index()
     abundance = ratio_medians.merge(refints, how = "left")
     abundance["Abundance"] = abundance["RefInt"] + abundance["Ratio"]
     return abundance
@@ -179,12 +186,12 @@ def gene_abundance(ratios, refints):
     #and RefInt is the sum of the reference intensities of the top 3 peptides for a protein
     #We only want to consider peptides that are gene specific
     ratios["gene_set"] = ratios["Proteins"].replace("(HLA-[ABCDPQR1]+)-[0-9A-Z]+-[0-9A-Z]+", "\\1", regex = True).str.split(", ").apply(set)
-    ratios_gene = ratios[ratios["Predicted_n"].isin([1, 2]) & (ratios["gene_set"].apply(len) == 1)].copy()
+    ratios_gene = ratios[ratios["Predicted_n"].isin([2]) & (ratios["gene_set"].apply(len) == 1)].copy()
     ratios_gene["Gene"] = ratios_gene["gene_set"].apply(lambda x: list(x)[0])
-    ratio_outliers = ratios_gene[["Aliquot", "Gene", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "LR_adj_MD"])
+    ratio_outliers = ratios_gene[["Aliquot", "Gene", "Peptide", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "LR_adj_MD"])
     ratio_outliers["Outlier"] = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(lambda x: is_outlier(x["LR_adj_MD"])).tolist()
     ratio_outliers = ratio_outliers[ratio_outliers["Outlier"] != True]
-    ratio_medians = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(lambda x: x["LR_adj_MD"].median()).reset_index().rename(columns = {0:"Ratio"})
+    ratio_medians = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(median_helper).reset_index().rename(columns = {0:"Ratio"})
     abundance = ratio_medians.merge(refints, how = "left")
     abundance["Abundance"] = abundance["RefInt"] + abundance["Ratio"]
     return abundance
