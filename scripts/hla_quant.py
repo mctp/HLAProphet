@@ -10,7 +10,7 @@ def parse_psm(filename, plex_size, ref_pattern, hla_types, tryptic_predictions, 
     print(f"Processing: {filename}")
     #Apply initial filters across all PSMs
     print(f"\tReading PSM")
-    psm = pd.read_csv(filename, sep = "\t")
+    psm = pd.read_csv(filename, sep = "\t", low_memory = False)
     #Use ref pattern to find ref channel column ID
     ref_matches = [x for x in psm.columns.values if x.find(ref_pattern) != -1]
     #Return an error if there is more than one match to the ref channel pattern
