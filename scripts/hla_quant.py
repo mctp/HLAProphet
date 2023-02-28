@@ -68,7 +68,8 @@ def remove_bad_peptides(peptides, ref_name):
     noise_peptides = peptides[(peptides["Predicted"] == False) & (peptides["Aliquot"].isin(predicted_aliquots))]
     noise = noise_peptides.groupby(["Peptide", "Plex"])["MS2"].apply(np.mean).reset_index().rename(columns = {"MS2":"Noise"})
     peptides = peptides.merge(noise, how = "left")
-    peptides["Noise_LR"] = np.log2(peptides["MS2"]/peptides["Noise"])
+    with np.errstate(divide = "ignore"):
+        peptides["Noise_LR"] = np.log2(peptides["MS2"]/peptides["Noise"])
     #Get the sample of all logratios for peptides that are predicted to be absent
     #Ignore cases with no typing information, and cases with MS2 of 0
     noise_ratios = peptides[(peptides["Aliquot"].isin(predicted_aliquots)) & (peptides["Predicted"] == False) & (~peptides["Noise_LR"].isna()) & (np.isfinite(peptides["Noise_LR"]))]["Noise_LR"]
@@ -133,7 +134,8 @@ def calc_ratios(peptides, ref_name, aliquot_ratios, pool_n, types, tryptic):
             break
         res_last = res
     peptides["Ratio_adj"] = peptides["Ratio"] * ((peptides["Total_n"] + c_best)/(pool_n*2 + c_best))
-    peptides["LR_adj"] = np.log2(peptides["Ratio_adj"])
+    with np.errstate(divide = "ignore"):
+        peptides["LR_adj"] = np.log2(peptides["Ratio_adj"])
     peptides["LR_adj_MD"] = peptides["LR_adj"] - np.log2(peptides["med_ratio"])
     peptides["Ratio_adj_MD"] = 2**peptides["LR_adj_MD"]
     peptides = peptides[peptides["Ratio_adj"] != 0]
