@@ -190,9 +190,24 @@ def gene_abundance(ratios, refints):
     ratios["gene_set"] = ratios["Proteins"].replace("(HLA-[ABCDPQR1]+)-[0-9A-Z]+-[0-9A-Z]+", "\\1", regex = True).str.split(", ").apply(set)
     ratios_gene = ratios[ratios["Predicted_n"].isin([1, 2]) & (ratios["gene_set"].apply(len) == 1)].copy()
     ratios_gene["Gene"] = ratios_gene["gene_set"].apply(lambda x: list(x)[0])
-    ratio_outliers = ratios_gene[["Aliquot", "Gene", "Peptide", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "LR_adj_MD"])
-    ratio_outliers["Outlier"] = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(lambda x: is_outlier(x["LR_adj_MD"])).tolist()
-    ratio_outliers = ratio_outliers[ratio_outliers["Outlier"] != True]
+    #For peptides with Predicted_n == 1, they contribute only 1 allele's worth of expression, but we want
+    #to use them to help calculate total gene expression. Experimentally, we find Predicted_n == 2 alleles
+    #are 82% higher than Predicted_n == 1 alleles, so we adjust by this amount to get what expression would be
+    #if they were present in 2 copies
+    ratios_gene["LR_adj_MD"] = np.where(ratios_gene["Predicted_n"] == 1,
+                                        np.log2(ratios_gene["Ratio_adj_MD"] * 1.82),
+                                        np.log2(ratios_gene["Ratio_adj_MD"]))
+    ratio_outliers = ratios_gene[["Aliquot", "Gene", "Peptide", "Ratio_adj_MD", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "LR_adj_MD"])
+    #Iteratively remove outliers
+    n_outliers = np.Inf
+    i = 1
+    while n_outliers > 0:
+        print(f"Removing outliers: Cycle {i}")
+        ratio_outliers["Outlier"] = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(lambda x: is_outlier(x["LR_adj_MD"])).tolist()
+        n_outliers = len(ratio_outliers[ratio_outliers["Outlier"] == True])
+        ratio_outliers = ratio_outliers[ratio_outliers["Outlier"] != True]
+        print(f"Removed {n_outliers} outliers")
+        i += 1
     ratio_medians = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(median_helper).reset_index().rename(columns = {0:"Ratio"})
     abundance = ratio_medians.merge(refints, how = "left")
     abundance["Abundance"] = abundance["RefInt"] + abundance["Ratio"]
