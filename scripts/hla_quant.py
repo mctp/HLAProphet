@@ -198,16 +198,8 @@ def gene_abundance(ratios, refints):
                                         np.log2(ratios_gene["Ratio_adj_MD"] * 1.82),
                                         np.log2(ratios_gene["Ratio_adj_MD"]))
     ratio_outliers = ratios_gene[["Aliquot", "Gene", "Peptide", "Ratio_adj_MD", "LR_adj_MD"]].copy().reset_index(drop = True).sort_values(["Aliquot", "Gene", "LR_adj_MD"])
-    #Iteratively remove outliers
-    n_outliers = np.Inf
-    i = 1
-    while n_outliers > 0:
-        print(f"Removing outliers: Cycle {i}")
-        ratio_outliers["Outlier"] = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(lambda x: is_outlier(x["LR_adj_MD"])).tolist()
-        n_outliers = len(ratio_outliers[ratio_outliers["Outlier"] == True])
-        ratio_outliers = ratio_outliers[ratio_outliers["Outlier"] != True]
-        print(f"Removed {n_outliers} outliers")
-        i += 1
+    ratio_outliers["Outlier"] = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(lambda x: is_outlier(x["LR_adj_MD"])).tolist()
+    ratio_outliers = ratio_outliers[ratio_outliers["Outlier"] != True]
     ratio_medians = ratio_outliers.groupby(["Aliquot", "Gene"]).apply(median_helper).reset_index().rename(columns = {0:"Ratio"})
     abundance = ratio_medians.merge(refints, how = "left")
     abundance["Abundance"] = abundance["RefInt"] + abundance["Ratio"]
