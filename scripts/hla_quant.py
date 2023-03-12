@@ -57,7 +57,7 @@ def parse_psm(filename, plex_size, ref_pattern, hla_types, tryptic_predictions, 
     psm_hla["Aliquot"] = psm_hla["Aliquot"].str.replace(ref_name, "ref")
     return psm_hla, ratios
 
-def remove_bad_peptides(peptides, ref_name):
+def test_peptides(peptides, ref_name):
     print(f"Removing peptides with bad signal to noise ratio")
     #Move ref channel to its own column
     refs = peptides[peptides["Aliquot"] == ref_name][["Peptide", "Plex", "MS2"]].copy().rename(columns = {"MS2":"RefMS2"})
@@ -82,11 +82,7 @@ def remove_bad_peptides(peptides, ref_name):
             continue
         res = scipy.stats.kstest(signal_ratios, noise_ratios)[1]
         ks_tests = pd.concat([ks_tests, pd.DataFrame({"Peptide":[peptide], "ks_p":[res]})], ignore_index = True)
-    #Only keep peptides that pass the ks test
-    peptides_keep = peptides[~peptides["Peptide"].isin(ks_tests[ks_tests["ks_p"] > .05]["Peptide"])]
-    #Only keep peptides that are predicted to be present
-    peptides_keep = peptides_keep[peptides_keep["Predicted"]]
-    return peptides_keep.drop(columns = ["Noise", "Noise_LR"])
+    return peptides, ks_tests
 
 def is_outlier(x):
     if len(x) < 5:
@@ -231,8 +227,14 @@ def main():
     #Use a generic ref channel name after parsing ref channel patterns across multiple plexes
     ref_name = "ref"
     #Remove peptides that don't have a strong signal to noise ratio
-    hla_peptides_filtered = remove_bad_peptides(hla_peptides.copy(), ref_name)
-
+    hla_peptides_tested, ks_results = test_peptides(hla_peptides.copy(), ref_name)
+    hla_peptides_tested.to_csv(f"{outdir}/{outfile_prefix}_peptide_noise.csv", index = False)
+    ks_results.to_csv(f"{outdir}/{outfile_prefix}_ks_results.csv", index = False)
+    #Only keep peptides that pass the ks test
+    peptides_keep = hla_peptides_tested[~hla_peptides_tested["Peptide"].isin(ks_results[ks_results["ks_p"] > .05]["Peptide"])]
+    #Only keep peptides that are predicted to be present
+    hla_peptides_filtered = peptides_keep[peptides_keep["Predicted"]].copy()
+    
     #Calculate refints
     hla_refints = calculate_refint(hla_peptides[hla_peptides["Peptide"].isin(hla_peptides_filtered["Peptide"])].copy(), ref_name)
     
