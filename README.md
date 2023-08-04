@@ -86,9 +86,17 @@ HLAProphet is a tool that allows for personalized quantification of the HLA prot
 1) Run HLA quant.
 
     ```
+    #HLA_RELATIONSHIPS is the relationship table created by make_hla_fasta.py
+    #TRYPTIC_PEPTIDES is the list of tryptic peptides created by tryptic_peptides.py
+    #FRAGPIPE_WORKDIR is the folder containing fragpipe outputs
+    #REF_PATTERN is the pattern used to identify reference pool samples
+    #PLEX_SIZE is the number of samples per plex
+    #POOL_N is the number of samples contributing to the reference pool
+    #OUTDIR is the directory to save output files
+    #OUT_PREFIX is the prefix to use for output filenames
     python scripts/hla_quant.py \
-        examples/example_relationships.csv \
-        examples/example_tryptic_peptides.csv \
+        $HLA_RELATIONSHIPS \
+        $TRYPTIC_PEPTIDES \
         $FRAGPIPE_WORKDIR \
         $REF_PATTERN \
         $PLEX_SIZE \
