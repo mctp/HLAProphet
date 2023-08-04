@@ -29,11 +29,15 @@ HLAProphet is a tool that allows for personalized quantification of the HLA prot
 
 3) Create an HLA fasta reference using `scripts/make_hla_fasta.py`. If two separate HLA types produce the same protein product, the protein is only included once in the output database. A relationship table is produced to tie original HLA types to the matching sequence in the HLA fasta, after clashes are resolved.
     ```
+    #HLA_TYPES is a table containing HLA types of all samples in an experiment
+    #IMGT_FASTA is the combined IMGT database fasta file created in the previous step
+    #HLA_FASTA is the output filename for the fasta file containing all HLA sequences for the experiment
+    #HLA_RELATIONSHIPS is a relationship table matching original HLA types in $HLA_TYPES to the condensed HLA types in $HLA_FASTA
     python scripts/make_hla_fasta.py \
-        examples/types.csv \
-        examples/IMGT/IMGT_HLA.fa \
-        examples/example_HLA.fa \
-        examples/example_relationships.csv
+        $HLA_TYPES \
+        $IMGT_FASTA \
+        $HLA_FASTA \
+        $HLA_RELATIONSHIPS
     ```
 
 3) Predict tryptic peptides using `scripts/tryptic_peptides.py`
