@@ -42,12 +42,17 @@ HLAProphet is a tool that allows for personalized quantification of the HLA prot
 
 3) Predict tryptic peptides using `scripts/tryptic_peptides.py`
     ```
+    #HLA_FASTA is the HLA fasta file created in the previous step
+    #N_MISSED_CLEAVAGE is the number of allowed missed cleavages by trypsin, suggested value is 2
+    #MIN_PEPTIDE_LENGTH is the minimum tryptic peptide length to keep, suggested value is 7
+    #MAX_PEPTIDE_LENGTH is the maximum tryptic peptide length to keep, suggested value is 50
+    #TRYPTIC_PEPTIDES is the filename of the final output file containing all predicted tryptic peptides for all HLA sequences
     python scripts/tryptic_peptides.py \
-        examples/example_HLA.fa \
-        2 \
-        7 \
-        50 \
-        examples/example_tryptic_peptides.csv
+        $HLA_FASTA \
+        $N_MISSED_CLEAVAGE \
+        $MIN_PEPTIDE_LENGTH \
+        $MAX_PEPTIDE_LENGTH \
+        $TRYPTIC_PEPTIDES
     ```
 
 # Fragpipe workflow
