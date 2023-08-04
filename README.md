@@ -20,9 +20,11 @@ HLAProphet is a tool that allows for personalized quantification of the HLA prot
 
 2) Create a local version of the IMGT/HLA protein database using `scripts/make_imgt_database.py`
     ```
+    #DOWNLOAD_DIR is a folder where the source IMGT reference files will be downloaded
+    #IMGT_FASTA is the filename of the final combined fasta file containing all HLA sequences
     python scripts/make_imgt_database.py \
-        examples/IMGT \
-        examples/IMGT/IMGT_HLA.fa
+        $DOWNLOAD_DIR \
+        $IMGT_FASTA
     ```
 
 3) Create an HLA fasta reference using `scripts/make_hla_fasta.py`. If two separate HLA types produce the same protein product, the protein is only included once in the output database. A relationship table is produced to tie original HLA types to the matching sequence in the HLA fasta, after clashes are resolved.
